@@ -1,81 +1,132 @@
-"""Offline review UI. Synthetic transport only; no HA connections."""
+"""Offline review GUI (Tkinter). Synthetic transport only; no HA connection exists here."""
+import asyncio
+import queue
+import threading
+import time
 import tkinter as tk
-from tkinter import filedialog, messagebox
 from pathlib import Path
-import json, zipfile, hashlib, threading, queue, asyncio, time, base64
-from collector import Store, request, capture
-from unittest.mock import patch
+from tkinter import filedialog, messagebox
 
-class DemoSocket:
-    def __init__(self, ids): self.ids=ids; self.step=0
-    async def __aenter__(self): return self
-    async def __aexit__(self,*args): pass
-    async def send(self, raw): pass
-    async def recv(self, **kwargs):
-        self.step+=1
-        messages=[{'type':'auth_required'},{'type':'auth_ok'}, {'id':1,'type':'result','success':True}, {'id':1,'type':'event','event':{'a':{i:{'s':'unknown'} for i in self.ids}}}]
-        if self.step<=4: msg=messages[self.step-1]
+import config
+from collector import capture
+from export import export_capture
+from synthetic import demo_connect_factory
+
+SYNTHETIC_URL = "wss://synthetic.invalid/api/websocket"
+
+
+class CollectorApp:
+    """GUI shell; dialogs and transport factory are injectable for automated smoke tests."""
+
+    def __init__(self, root, choose_folder=None, choose_target=None, show_error=None, connect_factory=demo_connect_factory):
+        self.root = root
+        self.choose_folder = choose_folder or (lambda: filedialog.askdirectory(title="Choose private local folder"))
+        self.choose_target = choose_target or (lambda: filedialog.asksaveasfilename(defaultextension=".zip"))
+        self.show_error = show_error or messagebox.showerror
+        self.connect_factory = connect_factory
+        self.events = queue.Queue()
+        self.stop = threading.Event()
+        self.active = False
+        self.last_capture = None
+        self.last_export = None
+        self._build()
+        self.root.protocol("WM_DELETE_WINDOW", self.close)
+        self._poll()
+
+    def _build(self):
+        root = self.root
+        root.title("HA Event Collector — offline review")
+        tk.Label(root, text="Synthetic test mode — live HA disabled").pack(padx=20, pady=12)
+        tk.Label(root, text="Exact entity IDs, one per line").pack()
+        self.entities = tk.Text(root, height=5, width=55)
+        self.entities.pack()
+        self.entities.insert("1.0", "sensor.example")
+        tk.Label(root, text=f"Duration in seconds ({config.MIN_DURATION_S}–{config.MAX_DURATION_S})").pack()
+        self.duration = tk.Entry(root)
+        self.duration.insert(0, "10")
+        self.duration.pack()
+        self.status = tk.StringVar(value="Ready")
+        tk.Label(root, textvariable=self.status, wraplength=420, justify="left").pack(pady=8)
+        self.start_button = tk.Button(root, text="Start synthetic capture", command=self.start)
+        self.start_button.pack(pady=4)
+        self.stop_button = tk.Button(root, text="Stop", command=self.stop.set, state="disabled")
+        self.stop_button.pack(pady=4)
+        self.export_button = tk.Button(root, text="Export capture", command=self.export, state="disabled")
+        self.export_button.pack(pady=4)
+
+    def _set_running(self, running):
+        self.active = running
+        self.start_button.config(state="disabled" if running else "normal")
+        self.stop_button.config(state="normal" if running else "disabled")
+        self.export_button.config(state="disabled" if running or self.last_capture is None else "normal")
+
+    def start(self):
+        try:
+            ids = config.validate_entity_ids(self.entities.get("1.0", "end").split())
+            seconds = config.validate_duration(self.duration.get())
+        except ValueError as exc:
+            self.show_error("Invalid input", str(exc))
+            return
+        parent = self.choose_folder()
+        if not parent:
+            return
+        self.last_capture = Path(parent) / f"capture-{time.strftime('%Y%m%d-%H%M%S')}-{time.time_ns() % 1_000_000:06d}"
+        self.stop.clear()
+        self._set_running(True)
+        self.status.set("Collecting synthetic messages")
+        connect_fn = self.connect_factory(ids)
+        target = self.last_capture
+
+        def run():
+            try:
+                manifest = asyncio.run(capture(SYNTHETIC_URL, "synthetic-only", ids, target, seconds, self.stop,
+                                               connect_fn, lambda n: self.events.put(("count", n)), synthetic=True))
+            except Exception as exc:  # reported in GUI; manifest holds the incomplete status
+                self.events.put(("done", f"INCOMPLETE — {type(exc).__name__}: {exc}"))
+            else:
+                label = "Complete" if manifest["complete"] else "INCOMPLETE"
+                self.events.put(("done", f"{label} — {manifest['reason']} ({manifest['messages']} messages)"))
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def export(self):
+        if self.last_capture is None:
+            return
+        target = self.choose_target()
+        if not target:
+            return
+        try:
+            result = export_capture(self.last_capture, target)
+        except Exception as exc:
+            self.show_error("Export failed", str(exc))
+            return
+        self.last_export = result
+        state = "complete" if result["complete"] else "INCOMPLETE"
+        self.status.set(f"Archive created ({state}).\nManifest SHA-256: {result['manifest_sha256']}\nArchive SHA-256: {result['archive_sha256']}")
+
+    def _poll(self):
+        while not self.events.empty():
+            kind, value = self.events.get_nowait()
+            if kind == "count":
+                self.status.set(f"{value} messages")
+            else:
+                self.status.set(value)
+                self._set_running(False)
+        self.root.after(100, self._poll)
+
+    def close(self):
+        if self.active:
+            self.stop.set()
+            self.root.after(200, self.close)
         else:
-            await asyncio.sleep(.1)
-            msg={'id':1,'type':'event','event':{'c':{self.ids[0]:{'+':{'s':str(self.step)}}}}}
-        return json.dumps(msg).encode()
+            self.root.destroy()
 
-async def demo(ids,path,seconds,stop,notify):
-    with patch('collector.connect',return_value=DemoSocket(ids)):
-        await capture('wss://synthetic.invalid','synthetic-only',ids,path,seconds,stop,notify)
-
-def export(source, target):
-    source=Path(source)
-    manifest=(source/'manifest.json').read_bytes(); rows=(source/'messages.jsonl').read_bytes(); meta=json.loads(manifest)
-    if hashlib.sha256(rows).hexdigest()!=meta['sha256']: raise ValueError('Capture hash mismatch')
-    entries=rows.splitlines()
-    if len(entries)!=meta['messages']: raise ValueError('Message count mismatch')
-    for n,line in enumerate(entries,1):
-        row=json.loads(line)
-        if row['seq']!=n or hashlib.sha256(base64.b64decode(row['payload_b64'],validate=True)).hexdigest()!=row['sha256']: raise ValueError('Message integrity failure')
-    with zipfile.ZipFile(target,'x',zipfile.ZIP_DEFLATED) as z:
-        z.writestr('manifest.json',manifest); z.writestr('messages.jsonl',rows)
 
 def main():
-    root=tk.Tk(); root.title('HA Event Collector — offline review')
-    tk.Label(root,text='Synthetic test mode — live HA disabled').pack(padx=20,pady=12)
-    tk.Label(root,text='Exact entity IDs, one per line').pack(); entities=tk.Text(root,height=5,width=55); entities.pack(); entities.insert('1.0','sensor.example')
-    tk.Label(root,text='Duration in seconds (1–900)').pack(); duration=tk.Entry(root); duration.insert(0,'10'); duration.pack()
-    status=tk.StringVar(value='Ready'); tk.Label(root,textvariable=status).pack(pady=8)
-    stop=threading.Event(); events=queue.Queue(); active=False; last=None
-    def start():
-        nonlocal active,last
-        try:
-            ids=entities.get('1.0','end').split(); request(ids); seconds=int(duration.get()); assert 1<=seconds<=900
-        except (ValueError,AssertionError): messagebox.showerror('Invalid input','Check entities and duration'); return
-        parent=filedialog.askdirectory(title='Choose private local folder')
-        if not parent:return
-        last=Path(parent)/('capture-'+str(time.time_ns())); stop.clear(); active=True; start_btn.config(state='disabled'); export_btn.config(state='disabled'); stop_btn.config(state='normal'); status.set('Collecting synthetic messages')
-        def run():
-            try: asyncio.run(demo(ids,last,seconds,stop,lambda n:events.put(('count',n))))
-            except Exception as e: events.put(('done','Incomplete: '+type(e).__name__))
-            else: events.put(('done','Capture stopped; inspect manifest'))
-        threading.Thread(target=run,daemon=True).start()
-    def choose():
-        source=last or filedialog.askdirectory()
-        if not source:return
-        target=filedialog.asksaveasfilename(defaultextension='.zip')
-        if not target:return
-        try: export(source,target)
-        except Exception as e: messagebox.showerror('Export failed',str(e))
-        else: status.set('Archive created')
-    def poll():
-        nonlocal active
-        while not events.empty():
-            kind,value=events.get_nowait()
-            if kind=='count': status.set(f'{value} messages')
-            else: active=False; status.set(value); start_btn.config(state='normal'); export_btn.config(state='normal'); stop_btn.config(state='disabled')
-        root.after(100,poll)
-    def close():
-        if active: stop.set(); root.after(200,close)
-        else: root.destroy()
-    start_btn=tk.Button(root,text='Start synthetic capture',command=start); start_btn.pack(pady=4)
-    stop_btn=tk.Button(root,text='Stop',command=stop.set,state='disabled'); stop_btn.pack(pady=4)
-    export_btn=tk.Button(root,text='Export capture',command=choose); export_btn.pack(pady=4)
-    root.protocol('WM_DELETE_WINDOW',close); poll(); root.mainloop()
-if __name__=='__main__':main()
+    root = tk.Tk()
+    CollectorApp(root)
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    main()

@@ -1,75 +1,115 @@
-"""Offline prototype: scoped HA WebSocket capture. No device commands."""
-import asyncio, hashlib, json, os, base64, time, re
-from pathlib import Path
-from datetime import datetime, timezone
-from websockets.asyncio.client import connect
+"""Bounded, scoped HA WebSocket evidence capture (POC12C, offline review candidate).
 
-class Store:
-    def __init__(self, path):
-        self.path=Path(path); self.path.mkdir(mode=0o700, parents=False, exist_ok=False)
-        self.file=os.fdopen(os.open(self.path/'messages.jsonl',os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600),'w',encoding='utf-8')
-        self.n=0; self.start=time.monotonic_ns(); self.complete=False; self.reason='unfinished'; self.size=0
-        self.manifest()
-    def manifest(self):
-        self.file.flush()
-        data=dict(messages=self.n, complete=self.complete, reason=self.reason, sha256=hashlib.sha256((self.path/'messages.jsonl').read_bytes()).hexdigest(), freshness='UNKNOWN')
-        tmp=self.path/'manifest.tmp'; tmp.write_text(json.dumps(data,indent=2)); tmp.replace(self.path/'manifest.json')
-    def record(self, direction, raw):
-        if isinstance(raw,str): raw=raw.encode('utf-8')
-        if self.size+len(raw)>10_000_000: raise ValueError('capture limit')
-        self.n+=1; self.size+=len(raw)
-        row=dict(seq=self.n,direction=direction,utc=datetime.now(timezone.utc).isoformat(),elapsed_ns=time.monotonic_ns()-self.start,sha256=hashlib.sha256(raw).hexdigest(),payload_b64=base64.b64encode(raw).decode('ascii'))
-        self.file.write(json.dumps(row)+'\n'); self.file.flush()
-    def close(self):
-        try: self.manifest()
-        finally: self.file.close()
+Only two application messages are ever sent: the auth message (never stored)
+and one `subscribe_entities` request for an exact allowlist. There is no code
+path that sends service calls, events or other commands.
 
-def request(ids):
-    if not ids or len(ids)>100 or len(set(ids))!=len(ids) or any(not re.fullmatch(r'[a-z0-9_]+\.[a-z0-9_]+',x) for x in ids): raise ValueError('exact unique entity IDs required')
-    return json.dumps(dict(id=1,type='subscribe_entities',entity_ids=ids))
+Live use against Home Assistant is NOT approved. The GUI uses the synthetic
+transport only; `live_connect` exists solely so reviewers can inspect the
+exact transport settings that a later, separately approved run would use.
+"""
+import asyncio
+import json
+import os
+import time
 
-def validate(message, ids):
-    if message.get('id')!=1: raise ValueError('unexpected ID')
-    if message.get('type')=='result':
-        if message.get('success') is not True: raise ValueError('subscription rejected')
-    elif message.get('type')=='event':
-        event=message['event']
-        if not isinstance(event,dict) or set(event)-{'a','c','r'}: raise ValueError('unknown delta schema')
-        for key, value in event.items():
-            if key=='r':
-                if not isinstance(value,list): raise ValueError('invalid removal')
-            elif not isinstance(value,dict): raise ValueError('invalid delta')
-            if set(value)-set(ids): raise ValueError('unexpected entity')
-    else: raise ValueError('unexpected type')
+import config
+import protocol
+from provenance import runtime_provenance
+from storage import EvidenceStore
 
-async def capture(url, token, ids, path, seconds, stop, notify=lambda n:None):
-    req=request(ids)
-    if not 1<=seconds<=900: raise ValueError('duration must be 1–900 seconds')
-    if not url.startswith('wss://'): raise ValueError('TLS WebSocket URL required')
-    store=Store(path)
+
+def live_connect(url):
+    """websockets client with fixed, reviewable settings (no proxy, no compression)."""
+    from websockets.asyncio.client import connect
+
+    return connect(
+        url,
+        max_size=config.MAX_MESSAGE_BYTES,
+        open_timeout=config.OPEN_TIMEOUT_S,
+        close_timeout=config.CLOSE_TIMEOUT_S,
+        proxy=None,
+        compression=None,
+    )
+
+
+async def _recv(ws, timeout, **kwargs):
+    return await asyncio.wait_for(ws.recv(**kwargs), timeout)
+
+
+async def capture(url, token, ids, path, seconds, stop, connect_fn, notify=lambda n: None,
+                  synthetic=False, platform=os.name, runner=None):
+    """Capture subscription messages into a new private folder; return the manifest.
+
+    Protocol violations raise after the capture is marked incomplete. An
+    observed removal of an allowlisted entity ends the capture as incomplete
+    (observation gap) without raising. `connect_fn` must be supplied explicitly.
+    """
+    config.validate_url(url)
+    ids = config.validate_entity_ids(ids)
+    seconds = config.validate_duration(seconds)
+    if connect_fn is None:
+        raise ValueError("transport must be supplied explicitly")
+    request = protocol.build_subscription(ids)
+    store_kwargs = {"platform": platform} if runner is None else {"platform": platform, "runner": runner}
+    store = EvidenceStore(path, ids, runtime_provenance(url, synthetic), **store_kwargs)
+    ack = initial = False
+    last_server_time = {}
     try:
-        async with connect(url, max_size=1_000_000, open_timeout=10, close_timeout=3, proxy=None) as ws:
-            if json.loads(await asyncio.wait_for(ws.recv(),10)).get('type')!='auth_required': raise ValueError('unexpected authentication handshake')
-            await ws.send(json.dumps(dict(type='auth',access_token=token)))
-            auth=json.loads(await asyncio.wait_for(ws.recv(),10))
-            if auth.get('type')!='auth_ok': raise ValueError('authentication rejected')
-            store.record('send',req); await ws.send(req)
-            deadline=time.monotonic()+seconds; ack=False; initial=False
-            while not stop.is_set() and time.monotonic()<deadline:
-                try: raw=await asyncio.wait_for(ws.recv(decode=False), min(0.25,max(0.001,deadline-time.monotonic())))
-                except asyncio.TimeoutError: continue
-                msg=json.loads(raw); validate(msg,ids)
-                store.record('receive',raw); notify(store.n)
-                if msg['type']=='event' and msg['event'].get('r'): raise ValueError('entity removed; observation gap')
-                if msg['type']=='result':
-                    if ack: raise ValueError('duplicate acknowledgement')
-                    ack=True
-                else:
-                    if not ack: raise ValueError('event before acknowledgement')
-                    if not initial:
-                        if set(msg['event'].get('a',{}))!=set(ids): raise ValueError('incomplete initial snapshot')
-                        initial=True
-            store.complete=ack and initial; store.reason='bounded observation ended' if store.complete else 'missing acknowledgement or snapshot'
+        async with connect_fn(url) as ws:
+            version = protocol.parse_handshake(await _recv(ws, config.HANDSHAKE_TIMEOUT_S), "auth_required")
+            await ws.send(json.dumps({"type": "auth", "access_token": token}))
+            raw_auth = await _recv(ws, config.HANDSHAKE_TIMEOUT_S)
+            try:
+                version = protocol.parse_handshake(raw_auth, "auth_ok") or version
+            except protocol.ProtocolError:
+                raise protocol.ProtocolError("authentication rejected") from None
+            store.meta["provenance"]["ha_version"] = version
+            store.record("send", request)
+            await ws.send(request.decode("utf-8"))
+            deadline = time.monotonic() + seconds
+            while not stop.is_set():
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                try:
+                    raw = await _recv(ws, min(config.RECEIVE_POLL_S, remaining), decode=False)
+                except asyncio.TimeoutError:
+                    continue
+                message = protocol.parse_message(raw, ids)
+                derived = protocol.describe_event(message) if message["type"] == "event" else None
+                store.record("receive", raw, derived)
+                notify(store.meta["messages"])
+                if message["type"] == "result":
+                    if ack:
+                        raise protocol.ProtocolError("duplicate acknowledgement")
+                    ack = True
+                    continue
+                if not ack:
+                    raise protocol.ProtocolError("event before acknowledgement")
+                if not initial:
+                    if set(message["event"]) != {"a"} or set(message["event"]["a"]) != set(ids):
+                        raise protocol.ProtocolError("incomplete initial snapshot")
+                    initial = True
+                if derived["unavailable"]:
+                    store.flag("unavailable_or_unknown", derived["unavailable"])
+                for entity_id, stamp in derived["server_times"].items():
+                    if entity_id in last_server_time and stamp < last_server_time[entity_id]:
+                        store.flag("out_of_order_server_time")
+                    last_server_time[entity_id] = max(stamp, last_server_time.get(entity_id, stamp))
+                if derived["removed"]:
+                    store.flag("removed_entities", derived["removed"])
+                    store.finish(False, "observation gap: allowlisted entity removed", "gap")
+                    return dict(store.meta)
+            ended_by = "operator" if stop.is_set() else "deadline"
+            if ack and initial:
+                store.finish(True, "bounded observation ended", ended_by)
+            else:
+                store.finish(False, "missing acknowledgement or initial snapshot", ended_by)
+            return dict(store.meta)
     except BaseException as exc:
-        store.complete=False; store.reason='entity removed; observation gap' if isinstance(exc,ValueError) and str(exc)=='entity removed; observation gap' else type(exc).__name__; raise
-    finally: store.close()
+        detail = str(exc) if isinstance(exc, (protocol.ProtocolError, ValueError)) else ""
+        store.finish(False, f"{type(exc).__name__}: {detail}" if detail else type(exc).__name__, "error")
+        raise
+    finally:
+        store.close()
