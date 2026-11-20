@@ -7,7 +7,7 @@ from websockets.asyncio.client import connect
 class Store:
     def __init__(self, path):
         self.path=Path(path); self.path.mkdir(mode=0o700, parents=False, exist_ok=False)
-        self.file=(self.path/'messages.jsonl').open('x', encoding='utf-8')
+        self.file=os.fdopen(os.open(self.path/'messages.jsonl',os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600),'w',encoding='utf-8')
         self.n=0; self.start=time.monotonic_ns(); self.complete=False; self.reason='unfinished'; self.size=0
         self.manifest()
     def manifest(self):
@@ -48,7 +48,7 @@ async def capture(url, token, ids, path, seconds, stop, notify=lambda n:None):
     if not url.startswith('wss://'): raise ValueError('TLS WebSocket URL required')
     store=Store(path)
     try:
-        async with connect(url, max_size=1_000_000, open_timeout=10, close_timeout=3) as ws:
+        async with connect(url, max_size=1_000_000, open_timeout=10, close_timeout=3, proxy=None) as ws:
             if json.loads(await asyncio.wait_for(ws.recv(),10)).get('type')!='auth_required': raise ValueError('unexpected authentication handshake')
             await ws.send(json.dumps(dict(type='auth',access_token=token)))
             auth=json.loads(await asyncio.wait_for(ws.recv(),10))
@@ -60,6 +60,7 @@ async def capture(url, token, ids, path, seconds, stop, notify=lambda n:None):
                 except asyncio.TimeoutError: continue
                 msg=json.loads(raw); validate(msg,ids)
                 store.record('receive',raw); notify(store.n)
+                if msg['type']=='event' and msg['event'].get('r'): raise ValueError('entity removed; observation gap')
                 if msg['type']=='result':
                     if ack: raise ValueError('duplicate acknowledgement')
                     ack=True
@@ -70,5 +71,5 @@ async def capture(url, token, ids, path, seconds, stop, notify=lambda n:None):
                         initial=True
             store.complete=ack and initial; store.reason='bounded observation ended' if store.complete else 'missing acknowledgement or snapshot'
     except BaseException as exc:
-        store.complete=False; store.reason=type(exc).__name__; raise
+        store.complete=False; store.reason='entity removed; observation gap' if isinstance(exc,ValueError) and str(exc)=='entity removed; observation gap' else type(exc).__name__; raise
     finally: store.close()
