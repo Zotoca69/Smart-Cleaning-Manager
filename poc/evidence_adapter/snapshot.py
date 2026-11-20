@@ -16,10 +16,25 @@ def scalar(value):
     return None
 
 def fields(obj, names):
-    return {name: scalar(getattr(obj, name, None)) for name in names}
+    values, metadata = {}, {}
+    for name in names:
+        value = getattr(obj, name, None)
+        normalized = scalar(value)
+        if isinstance(value, Enum):
+            fallback = type(value).__members__.get("unknown")
+            if fallback is None:
+                fallback = next(iter(type(value)))
+            ambiguous = value is fallback
+            metadata[name] = {"origin": "LIBRARY_NORMALIZED_UNKNOWN_MAY_BE_COERCED",
+                              "normalized": normalized, "ambiguous": ambiguous}
+            if ambiguous:
+                normalized = None
+        values[name] = normalized
+    return values, metadata
 
 def snapshot(*, ha_version, library_version, candidates, now):
     """Caller must supply uniquely bound native V1 coordinator candidates.
+    Call synchronously on HA event loop, never executor/thread.
     Never authorizes dispatch: cached mutable traits cannot prove freshness.
     """
     result = {"usable_for_dispatch": False, "freshness": "UNKNOWN"}
@@ -34,18 +49,18 @@ def snapshot(*, ha_version, library_version, candidates, now):
         summary = api.clean_summary
         if status is None or summary is None:
             raise ValueError("missing trait")
-        before = coord._last_update_success_time
-        data = fields(status, STATUS_FIELDS)
-        record = fields(summary.last_clean_record, RECORD_FIELDS)
+        data, sm = fields(status, STATUS_FIELDS)
+        latest = summary.last_clean_record
+        record, rm = fields(latest, RECORD_FIELDS)
         after = coord._last_update_success_time
-        if before != after:
-            return dict(result, diagnostic="UPDATE_CHANGED")
         stamp = None
         if isinstance(after, datetime) and after.tzinfo is not None:
             if now.tzinfo is not None and after <= now:
                 stamp = after.astimezone(timezone.utc).isoformat()
         return dict(result, diagnostic="OBSERVATION_ONLY", status=data,
-                    record=record, coordinator_last_success=stamp,
+                    record=record, record_present=latest is not None,
+                    enum_metadata={"status": sm, "record": rm},
+                    coordinator_last_success=stamp,
                     observed_at=now.astimezone(timezone.utc).isoformat()
                     if now.tzinfo is not None else None)
     except (AttributeError, TypeError, ValueError, RuntimeError):
