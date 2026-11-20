@@ -1,0 +1,15 @@
+test_bytes (test_collector.Tests.test_bytes) ... ok
+test_delta (test_collector.Tests.test_delta) ... ok
+test_reject (test_collector.Tests.test_reject) ... ok
+test_request (test_collector.Tests.test_request) ... ok
+test_disconnect (test_demo.DemoTests.test_disconnect) ... ok
+test_early_stop (test_demo.DemoTests.test_early_stop) ... ok
+test_end_to_end (test_demo.DemoTests.test_end_to_end) ... ok
+test_unexpected_entity (test_demo.DemoTests.test_unexpected_entity) ... ok
+test_export (test_export.ExportTests.test_export) ... ok
+test_tampered (test_export.ExportTests.test_tampered) ... ok
+
+----------------------------------------------------------------------
+Ran 10 tests in 0.117s
+
+OK
