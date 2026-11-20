@@ -16,3 +16,6 @@ For python-roborock 7.12.0, the conservative enum projection masks these possibl
 | state | 0 | Unknown status. |
 
 Other interruption codes (29, 35–37) are not these fallback values. Raw integer fields complete, error and in_returning are not affected by enum fallback masking when supplied as integers. None of these observations alone establishes task identity, termination, completion or freshness. Source: Claude follow-up review of e1e388f, PR #6 comment 7040828568; python-roborock v7.12.0 enum implementation. Actual field population remains unverified. Reliable raw-code access or equivalent independently verified evidence is an implementation gate before relying on affected values. U9: next POC shall test actual pinned python-roborock classes in isolation (including unknown-code coercion and genuine fallback codes) before live bridge; no runtime verification claimed here.
+
+### Preserved U9 evidence
+poc11a.py is Claude's original standalone reproduction artifact, not product code or part of unittest discovery. It requires an isolated environment with python-roborock 7.12.0; see #3 comment 7041058843 and POC_REPORT. Inspect reported deviations, not exit status alone. No HA or device connections.
