@@ -23,3 +23,5 @@ Anonymized from a private POC record. HA Green, Saros 20 Sonic, official Roboroc
 | ER18 | No direct observation; design hypothesis informed by 06D–F. | Logical job may span physical jobs. |
 
 Unmatched observations require reconciliation with the private source or repeat testing before being treated as verified evidence. Do not publish household-specific data.
+
+2026-11-20: #3 / PR #5 owner decision supersedes selective remaining-segment recovery recommendations in ER07, ER13 and ER16 where applicable. Historical observations remain unchanged; retained-task resume or full-scope new start replaces selective replay.
