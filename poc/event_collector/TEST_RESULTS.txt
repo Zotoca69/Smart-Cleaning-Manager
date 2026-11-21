@@ -1,0 +1,117 @@
+POC12C regression test record — implementer self-check (Claude), NOT independent review
+=========================================================================================
+Tested code revision: bace40dd10e21540b33c920d3abfb92f5ca9b0d6 (this file is added in a later documentation-only commit;
+no code changed after the tested revision).
+Collector source digest (provenance.source_digest): b36a9de725e7b6459e6323b832f4b17c198da096f8c60f4e0db6f1824c304411
+Tested from a clean `git archive` of the revision. Date: 2026-11-21 (UTC+01:00).
+Environment: Linux (Ubuntu 24.04 container), synthetic data only, no network except loopback 127.0.0.1.
+
+Executed here:
+  Run A  Python 3.13.18, websockets 16.0, no Tkinter: 38 tests, 36 ok, 2 skipped (GUI, real Windows ACL), exit 0
+  Run B  Python 3.12.3, Tk 8.6 under Xvfb, websockets 16.0, SCM_REQUIRE_GUI=1: 38 tests, 37 ok, 1 skipped (real Windows ACL), exit 0
+  (Forced-requirement switches SCM_REQUIRE_GUI / SCM_REQUIRE_WINDOWS_ACL were shown to fail correctly
+   when the environment is missing in the record for 0733c6c; unchanged since.)
+
+Windows package history (owner machine, Windows 11, Python 3.13.15, websockets 16.0):
+  run 1 on f1d78bc: FAIL, storage failed closed on Python >=3.12.4 mkdir(0o700) ACEs; fixed in 645fed4.
+  run 2 on 9e819b2: PASS in all six steps (37 tests, 35 ok, 2 skipped; real ACL and GUI PASS).
+  This revision adds local ws:// (owner decision #3 7068495713) and a plain ws:// loopback test;
+  Windows rerun optional under the lighter process.
+
+NOT executed here: Windows rerun on this revision; PowerShell syntax check; anything against HA.
+
+### Run A: Python 3.13.18 (no Tkinter), websockets 16.0, Linux
+$ python -m unittest discover -v
+test_authentication_rejected (test_capture.CaptureTests.test_authentication_rejected) ... ok
+test_complete_capture_byte_fidelity_and_provenance (test_capture.CaptureTests.test_complete_capture_byte_fidelity_and_provenance) ... ok
+test_deadline_end (test_capture.CaptureTests.test_deadline_end) ... ok
+test_disconnect_mid_capture (test_capture.CaptureTests.test_disconnect_mid_capture) ... ok
+test_duplicate_out_of_order_and_unavailable_are_flagged_not_dropped (test_capture.CaptureTests.test_duplicate_out_of_order_and_unavailable_are_flagged_not_dropped) ... ok
+test_input_guards_before_any_storage (test_capture.CaptureTests.test_input_guards_before_any_storage) ... ok
+test_live_transport_settings (test_capture.CaptureTests.test_live_transport_settings) ... ok
+test_missing_ack_or_snapshot (test_capture.CaptureTests.test_missing_ack_or_snapshot) ... ok
+test_no_write_command_path_in_sources (test_capture.CaptureTests.test_no_write_command_path_in_sources)
+Static guard: only auth and subscribe_entities are ever constructed. ... ok
+test_operator_stop_before_start (test_capture.CaptureTests.test_operator_stop_before_start) ... ok
+test_protocol_violations_are_incomplete_and_not_stored (test_capture.CaptureTests.test_protocol_violations_are_incomplete_and_not_stored) ... ok
+test_removal_is_visible_gap (test_capture.CaptureTests.test_removal_is_visible_gap) ... ok
+test_size_limit (test_capture.CaptureTests.test_size_limit) ... ok
+test_unexpected_handshake (test_capture.CaptureTests.test_unexpected_handshake) ... ok
+test_export_roundtrip_digests_and_no_overwrite (test_export.ExportTests.test_export_roundtrip_digests_and_no_overwrite) ... ok
+test_incomplete_capture_exports_with_status (test_export.ExportTests.test_incomplete_capture_exports_with_status) ... ok
+test_manifest_problems (test_export.ExportTests.test_manifest_problems) ... ok
+test_row_hash_checked_even_if_aggregate_recomputed (test_export.ExportTests.test_row_hash_checked_even_if_aggregate_recomputed) ... ok
+test_tampering_detected (test_export.ExportTests.test_tampering_detected) ... ok
+test_synthetic_capture_and_export_via_gui (test_gui.GuiSmokeTests.test_synthetic_capture_and_export_via_gui) ... skipped "GUI unavailable (ModuleNotFoundError: No module named 'tkinter')"
+test_real_websocket_plain_roundtrip (test_loopback.LoopbackTests.test_real_websocket_plain_roundtrip) ... ok
+test_real_websocket_tls_roundtrip (test_loopback.LoopbackTests.test_real_websocket_tls_roundtrip) ... ok
+test_duration (test_protocol.ConfigValidationTests.test_duration) ... ok
+test_entity_ids (test_protocol.ConfigValidationTests.test_entity_ids) ... ok
+test_url (test_protocol.ConfigValidationTests.test_url) ... ok
+test_describe_event (test_protocol.ProtocolTests.test_describe_event) ... ok
+test_handshake (test_protocol.ProtocolTests.test_handshake) ... ok
+test_rejected_messages (test_protocol.ProtocolTests.test_rejected_messages) ... ok
+test_subscription_is_exact_and_scoped (test_protocol.ProtocolTests.test_subscription_is_exact_and_scoped) ... ok
+test_valid_messages (test_protocol.ProtocolTests.test_valid_messages) ... ok
+test_existing_folder_rejected (test_storage.StoreTests.test_existing_folder_rejected) ... ok
+test_manifest_tracks_every_row_so_interruption_is_verifiable (test_storage.StoreTests.test_manifest_tracks_every_row_so_interruption_is_verifiable) ... ok
+test_only_bytes_accepted (test_storage.StoreTests.test_only_bytes_accepted) ... ok
+test_posix_private_modes (test_storage.StoreTests.test_posix_private_modes) ... ok
+test_commands_and_success (test_storage.WindowsAclLogicTests.test_commands_and_success) ... ok
+test_fail_closed_and_cleanup (test_storage.WindowsAclLogicTests.test_fail_closed_and_cleanup) ... ok
+test_single_rule_object_from_convertto_json (test_storage.WindowsAclLogicTests.test_single_rule_object_from_convertto_json) ... ok
+test_real_acl_is_current_user_only (test_storage.WindowsAclRealTests.test_real_acl_is_current_user_only) ... skipped 'real Windows ACLs (forced by SCM_REQUIRE_WINDOWS_ACL=1)'
+
+----------------------------------------------------------------------
+Ran 38 tests in 9.562s
+
+OK (skipped=2)
+exit=0
+
+### Run B: Python 3.12.3 with Tk 8.6 under Xvfb, websockets 16.0, Linux
+$ SCM_REQUIRE_GUI=1 xvfb-run -a python -m unittest discover -v
+test_authentication_rejected (test_capture.CaptureTests.test_authentication_rejected) ... ok
+test_complete_capture_byte_fidelity_and_provenance (test_capture.CaptureTests.test_complete_capture_byte_fidelity_and_provenance) ... ok
+test_deadline_end (test_capture.CaptureTests.test_deadline_end) ... ok
+test_disconnect_mid_capture (test_capture.CaptureTests.test_disconnect_mid_capture) ... ok
+test_duplicate_out_of_order_and_unavailable_are_flagged_not_dropped (test_capture.CaptureTests.test_duplicate_out_of_order_and_unavailable_are_flagged_not_dropped) ... ok
+test_input_guards_before_any_storage (test_capture.CaptureTests.test_input_guards_before_any_storage) ... ok
+test_live_transport_settings (test_capture.CaptureTests.test_live_transport_settings) ... ok
+test_missing_ack_or_snapshot (test_capture.CaptureTests.test_missing_ack_or_snapshot) ... ok
+test_no_write_command_path_in_sources (test_capture.CaptureTests.test_no_write_command_path_in_sources)
+Static guard: only auth and subscribe_entities are ever constructed. ... ok
+test_operator_stop_before_start (test_capture.CaptureTests.test_operator_stop_before_start) ... ok
+test_protocol_violations_are_incomplete_and_not_stored (test_capture.CaptureTests.test_protocol_violations_are_incomplete_and_not_stored) ... ok
+test_removal_is_visible_gap (test_capture.CaptureTests.test_removal_is_visible_gap) ... ok
+test_size_limit (test_capture.CaptureTests.test_size_limit) ... ok
+test_unexpected_handshake (test_capture.CaptureTests.test_unexpected_handshake) ... ok
+test_export_roundtrip_digests_and_no_overwrite (test_export.ExportTests.test_export_roundtrip_digests_and_no_overwrite) ... ok
+test_incomplete_capture_exports_with_status (test_export.ExportTests.test_incomplete_capture_exports_with_status) ... ok
+test_manifest_problems (test_export.ExportTests.test_manifest_problems) ... ok
+test_row_hash_checked_even_if_aggregate_recomputed (test_export.ExportTests.test_row_hash_checked_even_if_aggregate_recomputed) ... ok
+test_tampering_detected (test_export.ExportTests.test_tampering_detected) ... ok
+test_synthetic_capture_and_export_via_gui (test_gui.GuiSmokeTests.test_synthetic_capture_and_export_via_gui) ... ok
+test_real_websocket_plain_roundtrip (test_loopback.LoopbackTests.test_real_websocket_plain_roundtrip) ... ok
+test_real_websocket_tls_roundtrip (test_loopback.LoopbackTests.test_real_websocket_tls_roundtrip) ... ok
+test_duration (test_protocol.ConfigValidationTests.test_duration) ... ok
+test_entity_ids (test_protocol.ConfigValidationTests.test_entity_ids) ... ok
+test_url (test_protocol.ConfigValidationTests.test_url) ... ok
+test_describe_event (test_protocol.ProtocolTests.test_describe_event) ... ok
+test_handshake (test_protocol.ProtocolTests.test_handshake) ... ok
+test_rejected_messages (test_protocol.ProtocolTests.test_rejected_messages) ... ok
+test_subscription_is_exact_and_scoped (test_protocol.ProtocolTests.test_subscription_is_exact_and_scoped) ... ok
+test_valid_messages (test_protocol.ProtocolTests.test_valid_messages) ... ok
+test_existing_folder_rejected (test_storage.StoreTests.test_existing_folder_rejected) ... ok
+test_manifest_tracks_every_row_so_interruption_is_verifiable (test_storage.StoreTests.test_manifest_tracks_every_row_so_interruption_is_verifiable) ... ok
+test_only_bytes_accepted (test_storage.StoreTests.test_only_bytes_accepted) ... ok
+test_posix_private_modes (test_storage.StoreTests.test_posix_private_modes) ... ok
+test_commands_and_success (test_storage.WindowsAclLogicTests.test_commands_and_success) ... ok
+test_fail_closed_and_cleanup (test_storage.WindowsAclLogicTests.test_fail_closed_and_cleanup) ... ok
+test_single_rule_object_from_convertto_json (test_storage.WindowsAclLogicTests.test_single_rule_object_from_convertto_json) ... ok
+test_real_acl_is_current_user_only (test_storage.WindowsAclRealTests.test_real_acl_is_current_user_only) ... skipped 'real Windows ACLs (forced by SCM_REQUIRE_WINDOWS_ACL=1)'
+
+----------------------------------------------------------------------
+Ran 38 tests in 11.955s
+
+OK (skipped=1)
+exit=0
