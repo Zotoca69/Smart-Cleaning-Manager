@@ -23,7 +23,8 @@ class ConfigValidationTests(unittest.TestCase):
 
     def test_url(self):
         config.validate_url("wss://synthetic.invalid/api/websocket")
-        for bad in ("ws://synthetic.invalid/api/websocket", "https://x", "", None):
+        config.validate_url("ws://synthetic.invalid:8123/api/websocket")
+        for bad in ("https://x", "http://synthetic.invalid/api/websocket", "ws://", "wss:///api/websocket", "", None):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 config.validate_url(bad)
 

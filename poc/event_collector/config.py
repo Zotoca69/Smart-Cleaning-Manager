@@ -23,7 +23,8 @@ RECEIVE_POLL_S = 0.25
 # Protocol
 SUBSCRIPTION_ID = 1
 SUBSCRIBE_TYPE = "subscribe_entities"
-REQUIRED_URL_SCHEME = "wss://"
+# Owner decision 7068495713: local ws:// allowed on the home network; wss:// still supported
+ALLOWED_URL_SCHEMES = ("ws://", "wss://")
 EVENT_KEYS = frozenset({"a", "c", "r"})
 UNAVAILABLE_STATES = frozenset({"unavailable", "unknown"})
 
@@ -67,7 +68,9 @@ def validate_duration(seconds):
 
 
 def validate_url(url):
-    """Require an encrypted WebSocket URL; local non-TLS use is an open owner decision."""
-    if not isinstance(url, str) or not url.startswith(REQUIRED_URL_SCHEME):
-        raise ValueError("TLS WebSocket URL (wss://) required")
+    """Require a WebSocket URL (ws:// on the home network or wss://) with a host."""
+    if not isinstance(url, str) or not url.startswith(ALLOWED_URL_SCHEMES):
+        raise ValueError("WebSocket URL (ws:// or wss://) required")
+    if not url.split("://", 1)[1].split("/", 1)[0]:
+        raise ValueError("WebSocket URL must include a host")
     return url

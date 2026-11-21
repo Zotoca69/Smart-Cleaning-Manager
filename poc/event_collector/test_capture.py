@@ -154,7 +154,7 @@ class CaptureTests(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         target = Path(tmp.name) / "c"
         connect = lambda url: self.fail("must not connect")
-        for url, ids, seconds, fn in (("ws://synthetic.invalid", IDS, 1, connect), (URL, [], 1, connect),
+        for url, ids, seconds, fn in (("http://synthetic.invalid", IDS, 1, connect), (URL, [], 1, connect),
                                       (URL, IDS, 0, connect), (URL, IDS, 901, connect), (URL, IDS, 1, None)):
             with self.subTest(url=url, ids=ids, seconds=seconds), self.assertRaises(ValueError):
                 asyncio.run(collector.capture(url, TOKEN, ids, target, seconds, threading.Event(), fn))

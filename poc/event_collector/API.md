@@ -52,6 +52,6 @@ Collector handling:
 | Minimal client on `websockets` 16.0 (chosen) | One pinned dependency, raw bytes via `recv(decode=False)`, no command API surface, every message validated against the allowlist. |
 
 ## Transport
-- `wss://` is required (token protection). Local non-TLS `ws://` access is an **open owner decision**; it is not supported in this revision.
+- `ws://` on the home network and `wss://` are both accepted (owner decision #3 7068495713). With `ws://` the token and data travel unencrypted on the local network; this is an accepted risk for a private home.
 - `live_connect` sets `proxy=None` (websockets otherwise honours system proxy settings), `compression=None`, `max_size` 1 MB, fixed open/close timeouts. No automatic reconnect; a disconnect ends the capture as incomplete.
 - Base64 rows preserve application message bytes after TLS and WebSocket framing are removed; they are not network packets and do not prove device truth or freshness.

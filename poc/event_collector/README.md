@@ -39,7 +39,7 @@ GUI "Export capture" (or `export.export_capture(folder, zip)`) verifies the fold
 
 ## Limits and decisions
 - Exact allowlist only (1–100 IDs), duration 1–900 s, 1 MB per message, 10 MB per capture, no reconnect.
-- `wss://` required; local `ws://` is an open owner decision. No proxy, no compression.
+- `ws://` (home network) or `wss://` accepted per owner decision #3 7068495713; unencrypted local traffic is an accepted risk. No proxy, no compression.
 - Write prevention is client-side only (see API.md). Token never stored; handshake not captured.
 - Windows protection uses `icacls`/`Get-Acl` (built-in); crash durability is per-row fsync on a local disk, not a guarantee against disk failure.
 - Live capture is intentionally not wired into the GUI and requires separate scoped approval.
@@ -55,7 +55,7 @@ GUI "Export capture" (or `export.export_capture(folder, zip)`) verifies the fold
 | U3 anchoring | manifest/archive SHA-256 shown and `.sha256` sidecar |
 | U4 crash durability | manifest after every row, fsync, verifiable partial capture |
 | U5 duplicates/order | preserved and flagged, interpretation left to review |
-| U6 `wss://` vs local `ws://` | kept `wss://`; documented as open owner decision |
+| U6 `wss://` vs local `ws://` | owner decision 7068495713: local `ws://` allowed; plain `ws://` loopback test runs on all platforms |
 | U7 proxy | `proxy=None` (tested) |
 | U8 no mock in production | transport injected; `synthetic.py` replaces `unittest.mock` |
 | U9 shared configuration | `config.py`; GUI uses the same validators (no `assert`) |
