@@ -1,30 +1,26 @@
 POC12C regression test record — implementer self-check (Claude), NOT independent review
 =========================================================================================
-Tested code revision: 0733c6cd0058940843851dcdef1cfcb1a57c83cd (this file is added in a later documentation-only commit;
+Tested code revision: bace40dd10e21540b33c920d3abfb92f5ca9b0d6 (this file is added in a later documentation-only commit;
 no code changed after the tested revision).
-Collector source digest (provenance.source_digest): a5f983080ff30f1dc7e2c222882b69ebfc8b370cce69d48d7cd2018607f0c909
+Collector source digest (provenance.source_digest): b36a9de725e7b6459e6323b832f4b17c198da096f8c60f4e0db6f1824c304411
 Tested from a clean `git archive` of the revision. Date: 2026-11-21 (UTC+01:00).
 Environment: Linux (Ubuntu 24.04 container), synthetic data only, no network except loopback 127.0.0.1.
 
 Executed here:
-  Run A  Python 3.13.18, websockets 16.0, no Tkinter: 37 tests, 35 ok, 2 skipped (GUI, real Windows ACL), exit 0
-  Run B  Python 3.12.3, Tk 8.6 under Xvfb, websockets 16.0, SCM_REQUIRE_GUI=1: 37 tests, 36 ok, 1 skipped (real Windows ACL), exit 0
-  Run C  forced Windows ACL requirement on Linux: fails as designed
-  Run D  forced GUI requirement without Tkinter: fails as designed
+  Run A  Python 3.13.18, websockets 16.0, no Tkinter: 38 tests, 36 ok, 2 skipped (GUI, real Windows ACL), exit 0
+  Run B  Python 3.12.3, Tk 8.6 under Xvfb, websockets 16.0, SCM_REQUIRE_GUI=1: 38 tests, 37 ok, 1 skipped (real Windows ACL), exit 0
+  (Forced-requirement switches SCM_REQUIRE_GUI / SCM_REQUIRE_WINDOWS_ACL were shown to fail correctly
+   when the environment is missing in the record for 0733c6c; unchanged since.)
 
 Windows package history (owner machine, Windows 11, Python 3.13.15, websockets 16.0):
-  2026-11-21 20:29 on f1d78bc: prerequisites and isolated environment PASS; regression suite,
-  Windows ACL and GUI FAIL. Every failure traced to storage fail-closed
-  "access granted to another principal": Python >=3.12.4 mkdir(mode=0o700) on Windows adds
-  explicit ACEs (current user and Administrators, CVE-2024-4030 mitigation) that
-  icacls /inheritance:r does not remove. Fixed in 645fed4 (DACL replaced). Rerun pending.
+  run 1 on f1d78bc: FAIL, storage failed closed on Python >=3.12.4 mkdir(0o700) ACEs; fixed in 645fed4.
+  run 2 on 9e819b2: PASS in all six steps (37 tests, 35 ok, 2 skipped; real ACL and GUI PASS).
+  This revision adds local ws:// (owner decision #3 7068495713) and a plain ws:// loopback test;
+  Windows rerun optional under the lighter process.
 
-NOT executed here:
-  - real Windows ACL test, GUI on Windows and windows/run_tests.ps1 on the fixed revision (owner rerun pending)
-  - PowerShell syntax check (PowerShell not available in this environment)
-  - anything against Home Assistant (not authorized)
+NOT executed here: Windows rerun on this revision; PowerShell syntax check; anything against HA.
 
-### Run A: Python 3.13.18 (/usr/local, no Tkinter), websockets 16.0, Linux
+### Run A: Python 3.13.18 (no Tkinter), websockets 16.0, Linux
 $ python -m unittest discover -v
 test_authentication_rejected (test_capture.CaptureTests.test_authentication_rejected) ... ok
 test_complete_capture_byte_fidelity_and_provenance (test_capture.CaptureTests.test_complete_capture_byte_fidelity_and_provenance) ... ok
@@ -47,7 +43,8 @@ test_manifest_problems (test_export.ExportTests.test_manifest_problems) ... ok
 test_row_hash_checked_even_if_aggregate_recomputed (test_export.ExportTests.test_row_hash_checked_even_if_aggregate_recomputed) ... ok
 test_tampering_detected (test_export.ExportTests.test_tampering_detected) ... ok
 test_synthetic_capture_and_export_via_gui (test_gui.GuiSmokeTests.test_synthetic_capture_and_export_via_gui) ... skipped "GUI unavailable (ModuleNotFoundError: No module named 'tkinter')"
-test_real_websocket_tls_roundtrip (test_loopback.LoopbackTlsTests.test_real_websocket_tls_roundtrip) ... ok
+test_real_websocket_plain_roundtrip (test_loopback.LoopbackTests.test_real_websocket_plain_roundtrip) ... ok
+test_real_websocket_tls_roundtrip (test_loopback.LoopbackTests.test_real_websocket_tls_roundtrip) ... ok
 test_duration (test_protocol.ConfigValidationTests.test_duration) ... ok
 test_entity_ids (test_protocol.ConfigValidationTests.test_entity_ids) ... ok
 test_url (test_protocol.ConfigValidationTests.test_url) ... ok
@@ -66,7 +63,7 @@ test_single_rule_object_from_convertto_json (test_storage.WindowsAclLogicTests.t
 test_real_acl_is_current_user_only (test_storage.WindowsAclRealTests.test_real_acl_is_current_user_only) ... skipped 'real Windows ACLs (forced by SCM_REQUIRE_WINDOWS_ACL=1)'
 
 ----------------------------------------------------------------------
-Ran 37 tests in 6.344s
+Ran 38 tests in 9.562s
 
 OK (skipped=2)
 exit=0
@@ -94,7 +91,8 @@ test_manifest_problems (test_export.ExportTests.test_manifest_problems) ... ok
 test_row_hash_checked_even_if_aggregate_recomputed (test_export.ExportTests.test_row_hash_checked_even_if_aggregate_recomputed) ... ok
 test_tampering_detected (test_export.ExportTests.test_tampering_detected) ... ok
 test_synthetic_capture_and_export_via_gui (test_gui.GuiSmokeTests.test_synthetic_capture_and_export_via_gui) ... ok
-test_real_websocket_tls_roundtrip (test_loopback.LoopbackTlsTests.test_real_websocket_tls_roundtrip) ... ok
+test_real_websocket_plain_roundtrip (test_loopback.LoopbackTests.test_real_websocket_plain_roundtrip) ... ok
+test_real_websocket_tls_roundtrip (test_loopback.LoopbackTests.test_real_websocket_tls_roundtrip) ... ok
 test_duration (test_protocol.ConfigValidationTests.test_duration) ... ok
 test_entity_ids (test_protocol.ConfigValidationTests.test_entity_ids) ... ok
 test_url (test_protocol.ConfigValidationTests.test_url) ... ok
@@ -113,27 +111,7 @@ test_single_rule_object_from_convertto_json (test_storage.WindowsAclLogicTests.t
 test_real_acl_is_current_user_only (test_storage.WindowsAclRealTests.test_real_acl_is_current_user_only) ... skipped 'real Windows ACLs (forced by SCM_REQUIRE_WINDOWS_ACL=1)'
 
 ----------------------------------------------------------------------
-Ran 37 tests in 8.732s
+Ran 38 tests in 11.955s
 
 OK (skipped=1)
 exit=0
-
-### Run C: forced Windows ACL requirement on Linux (expected FAIL)
-$ SCM_REQUIRE_WINDOWS_ACL=1 python -m unittest -v test_storage.WindowsAclRealTests
-test_real_acl_is_current_user_only (test_storage.WindowsAclRealTests.test_real_acl_is_current_user_only) ... FAIL
-FAIL: test_real_acl_is_current_user_only (test_storage.WindowsAclRealTests.test_real_acl_is_current_user_only)
-  File "<checkout>/poc/event_collector/test_storage.py", line 126, in test_real_acl_is_current_user_only
-AssertionError: 'posix' != 'nt'
-Ran 1 test in 0.000s
-FAILED (failures=1)
-exit=1
-
-### Run D: forced GUI requirement without Tkinter (expected FAIL)
-$ SCM_REQUIRE_GUI=1 python -m unittest -v test_gui
-test_synthetic_capture_and_export_via_gui (test_gui.GuiSmokeTests.test_synthetic_capture_and_export_via_gui) ... FAIL
-FAIL: test_synthetic_capture_and_export_via_gui (test_gui.GuiSmokeTests.test_synthetic_capture_and_export_via_gui)
-  File "<checkout>/poc/event_collector/test_gui.py", line 26, in test_synthetic_capture_and_export_via_gui
-AssertionError: False is not true : GUI required but unavailable: ModuleNotFoundError: No module named 'tkinter'
-Ran 1 test in 0.001s
-FAILED (failures=1)
-exit=1
