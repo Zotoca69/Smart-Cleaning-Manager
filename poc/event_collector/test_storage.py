@@ -47,8 +47,9 @@ class WindowsAclLogicTests(unittest.TestCase):
         result = storage.create_private_directory(self.path, platform="nt", runner=fake)
         self.assertEqual(result["mechanism"], "windows-acl")
         self.assertNotIn(SID, json.dumps(result))
-        icacls = [c for c in fake.calls if c[0][0] == "icacls"][0][0]
-        self.assertEqual(icacls, ["icacls", str(self.path), "/inheritance:r", "/grant:r", f"*{SID}:(OI)(CI)F"])
+        icacls = [c[0] for c in fake.calls if c[0][0] == "icacls"]
+        self.assertEqual(icacls, [["icacls", str(self.path), "/reset"],
+                                  ["icacls", str(self.path), "/inheritance:r", "/grant:r", f"*{SID}:(OI)(CI)F"]])
         ps = [c for c in fake.calls if c[0][0] == "powershell"][0]
         self.assertEqual(ps[1]["SCM_ACL_PATH"], str(self.path))  # path passed via env, not interpolated
 
@@ -56,6 +57,7 @@ class WindowsAclLogicTests(unittest.TestCase):
         bad_acls = [
             {"protected": False, "rules": [{"sid": SID, "type": "Allow"}]},
             {"protected": True, "rules": [{"sid": SID, "type": "Allow"}, {"sid": OTHER, "type": "Allow"}]},
+            {"protected": True, "rules": [{"sid": SID, "type": "Allow"}, {"sid": "S-1-5-32-544", "type": "Allow"}]},  # Administrators left by mkdir(0o700)
             {"protected": True, "rules": [{"sid": SID, "type": "Deny"}]},
             {"protected": True, "rules": []},
         ]

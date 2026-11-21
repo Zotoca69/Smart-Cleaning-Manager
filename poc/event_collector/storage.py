@@ -69,13 +69,22 @@ def check_windows_acl(acl, sid, require_protected=True):
         raise StorageError("inherited permissions are still active")
     if not acl["rules"]:
         raise StorageError("no access rules found")
-    for rule in acl["rules"]:
-        if rule.get("sid") != sid or rule.get("type") != "Allow":
-            raise StorageError("access granted to another principal")
+    others = sorted({str(rule.get("sid")) for rule in acl["rules"] if rule.get("sid") != sid})
+    if others:
+        raise StorageError("access granted to another principal: " + ", ".join(others))
+    if any(rule.get("type") != "Allow" for rule in acl["rules"]):
+        raise StorageError("unexpected deny rule")
 
 
 def protect_windows_directory(path, runner=_run):
+    """Replace the folder's whole DACL with one current-user ACE.
+
+    `/reset` first discards any explicit ACEs (e.g. those Python >= 3.12.4
+    adds for mkdir(mode=0o700) on Windows: current user and Administrators,
+    CVE-2024-4030), then inheritance is removed and only the user is granted.
+    """
     sid = current_windows_sid(runner)
+    runner(["icacls", str(path), "/reset"])
     runner(["icacls", str(path), "/inheritance:r", "/grant:r", f"*{sid}:(OI)(CI)F"])
     check_windows_acl(read_windows_acl(path, runner), sid)
     return sid
@@ -90,7 +99,10 @@ def check_posix_private(path, expected):
 def create_private_directory(path, platform=os.name, runner=_run):
     """Create a new private capture directory; returns a description of protection."""
     path = Path(path)
-    path.mkdir(mode=0o700, parents=False, exist_ok=False)
+    if platform == "nt":
+        path.mkdir(parents=False, exist_ok=False)  # ACL applied explicitly below
+    else:
+        path.mkdir(mode=0o700, parents=False, exist_ok=False)
     try:
         if platform == "nt":
             sid = protect_windows_directory(path, runner)
