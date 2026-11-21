@@ -91,7 +91,10 @@ try {
     $Code = Join-Path $WorkDir 'collector'
     New-Item -ItemType Directory -Path $Code -Force | Out-Null
     Get-ChildItem -Path $SourceDir -File | Where-Object { $_.Extension -in '.py', '.txt', '.md' } | Copy-Item -Destination $Code
-    Copy-Item -Path (Join-Path $PSScriptRoot 'acl_evidence.py') -Destination $Code
+    $Tools = Join-Path $WorkDir 'tools'
+    New-Item -ItemType Directory -Path $Tools -Force | Out-Null
+    Copy-Item -Path (Join-Path $PSScriptRoot 'acl_evidence.py') -Destination $Tools
+    $env:PYTHONPATH = $Code
     # Revision is taken from the extracted GitHub archive folder name when available.
     $env:SCM_COLLECTOR_REVISION = ''
     if ((Split-Path -Leaf (Split-Path -Parent (Split-Path -Parent $SourceDir))) -match '-([0-9a-f]{40})$') { $env:SCM_COLLECTOR_REVISION = $Matches[1] }
@@ -118,7 +121,7 @@ try {
     # 4. Windows ACL verification ------------------------------------------------
     Write-Step '4/6 Windows storage permissions'
     $c = Invoke-Logged 'windows-acl-test' $py @('-m', 'unittest', '-v', 'test_storage.WindowsAclRealTests') $Code
-    $c2 = Invoke-Logged 'windows-acl-evidence' $py @('acl_evidence.py') $Code
+    $c2 = Invoke-Logged 'windows-acl-evidence' $py @((Join-Path $Tools 'acl_evidence.py')) $Code
     Add-Result 'windows-acl' $(if ($c -eq 0 -and $c2 -eq 0) { 'PASS' } else { 'FAIL' }) "$c/$c2" 'current-user-only ACL, inheritance removed'
 
     # 5. GUI smoke test -----------------------------------------------------------

@@ -49,7 +49,7 @@ GUI "Export capture" (or `export.export_capture(folder, zip)`) verifies the fold
 |---|---|
 | B1 API documentation | `API.md`: version/source, schema, ordering, event and compressed formats, permission model, client-side-only write prevention, client comparison |
 | B2 gaps and tests | removal → incomplete `observation gap`; duplicates, out-of-order server time and unavailable/unknown flagged; full negative suite incl. malformed, coalesced, wrong ID, rejected subscription, auth failure, disconnect, size, guards, no-write static check, loopback TLS test with real websockets |
-| B3 private storage | POSIX 0700/0600 verified; Windows `icacls /inheritance:r /grant:r *SID:(OI)(CI)F` + `Get-Acl` SID verification, fail closed; real Windows test in the Windows package (not executable in the Linux review environment) |
+| B3 private storage | POSIX 0700/0600 verified; Windows folder created without mode, then `icacls /reset` and `icacls /inheritance:r /grant:r *SID:(OI)(CI)F` + `Get-Acl` SID verification, fail closed (Python >=3.12.4 mkdir(0o700) adds Administrators ACEs, so the whole DACL is replaced); real Windows test in the Windows package (not executable in the Linux review environment) |
 | U1 HA version | `ha_version` from handshake in manifest |
 | U2 provenance | session ID, start/end, allowlist, endpoint hash, collector revision and source digest, runtime versions |
 | U3 anchoring | manifest/archive SHA-256 shown and `.sha256` sidecar |
