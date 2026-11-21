@@ -1,25 +1,30 @@
 POC12C regression test record — implementer self-check (Claude), NOT independent review
 =========================================================================================
-Tested code revision: 1275d8e3dd67ff0cfc0493b7af874bac5041823a (this file is added in a later
-documentation-only commit; no code changed after the tested revision).
-Collector source digest (provenance.source_digest): 60029fbf8961c14ef5b6d232490a137c0c8c4c20ecdb4a9828b7e39c4d258696
-Tested from a clean `git archive` of the revision. Date: 2026-11-20 (UTC+01:00).
+Tested code revision: 0733c6cd0058940843851dcdef1cfcb1a57c83cd (this file is added in a later documentation-only commit;
+no code changed after the tested revision).
+Collector source digest (provenance.source_digest): a5f983080ff30f1dc7e2c222882b69ebfc8b370cce69d48d7cd2018607f0c909
+Tested from a clean `git archive` of the revision. Date: 2026-11-21 (UTC+01:00).
 Environment: Linux (Ubuntu 24.04 container), synthetic data only, no network except loopback 127.0.0.1.
 
-Executed and passed:
+Executed here:
   Run A  Python 3.13.18, websockets 16.0, no Tkinter: 37 tests, 35 ok, 2 skipped (GUI, real Windows ACL), exit 0
   Run B  Python 3.12.3, Tk 8.6 under Xvfb, websockets 16.0, SCM_REQUIRE_GUI=1: 37 tests, 36 ok, 1 skipped (real Windows ACL), exit 0
-  Run C  forced Windows ACL requirement on Linux: fails as designed (switch cannot be silently skipped)
+  Run C  forced Windows ACL requirement on Linux: fails as designed
   Run D  forced GUI requirement without Tkinter: fails as designed
 
-NOT executed here (pending owner run of windows/RUN_TESTS.cmd and independent review):
-  - real Windows ACL test (test_storage.WindowsAclRealTests) and acl_evidence.py
-  - GUI on Windows
-  - windows/run_tests.ps1 itself (PowerShell was not available in this environment; script not syntax-checked)
+Windows package history (owner machine, Windows 11, Python 3.13.15, websockets 16.0):
+  2026-11-21 20:29 on f1d78bc: prerequisites and isolated environment PASS; regression suite,
+  Windows ACL and GUI FAIL. Every failure traced to storage fail-closed
+  "access granted to another principal": Python >=3.12.4 mkdir(mode=0o700) on Windows adds
+  explicit ACEs (current user and Administrators, CVE-2024-4030 mitigation) that
+  icacls /inheritance:r does not remove. Fixed in 645fed4 (DACL replaced). Rerun pending.
+
+NOT executed here:
+  - real Windows ACL test, GUI on Windows and windows/run_tests.ps1 on the fixed revision (owner rerun pending)
+  - PowerShell syntax check (PowerShell not available in this environment)
   - anything against Home Assistant (not authorized)
 
-### Run A: Python 3.13.18 (/usr/local/bin/python3.13, no Tkinter), websockets 16.0, Linux
-3.13.18 Linux-6.18.44-fc-v726-x86_64-with-glibc2.39 websockets 16.0
+### Run A: Python 3.13.18 (/usr/local, no Tkinter), websockets 16.0, Linux
 $ python -m unittest discover -v
 test_authentication_rejected (test_capture.CaptureTests.test_authentication_rejected) ... ok
 test_complete_capture_byte_fidelity_and_provenance (test_capture.CaptureTests.test_complete_capture_byte_fidelity_and_provenance) ... ok
@@ -61,13 +66,12 @@ test_single_rule_object_from_convertto_json (test_storage.WindowsAclLogicTests.t
 test_real_acl_is_current_user_only (test_storage.WindowsAclRealTests.test_real_acl_is_current_user_only) ... skipped 'real Windows ACLs (forced by SCM_REQUIRE_WINDOWS_ACL=1)'
 
 ----------------------------------------------------------------------
-Ran 37 tests in 6.523s
+Ran 37 tests in 6.344s
 
 OK (skipped=2)
 exit=0
 
 ### Run B: Python 3.12.3 with Tk 8.6 under Xvfb, websockets 16.0, Linux
-3.12.3 Linux-6.18.44-fc-v726-x86_64-with-glibc2.39 websockets 16.0 tk 8.6
 $ SCM_REQUIRE_GUI=1 xvfb-run -a python -m unittest discover -v
 test_authentication_rejected (test_capture.CaptureTests.test_authentication_rejected) ... ok
 test_complete_capture_byte_fidelity_and_provenance (test_capture.CaptureTests.test_complete_capture_byte_fidelity_and_provenance) ... ok
@@ -109,22 +113,22 @@ test_single_rule_object_from_convertto_json (test_storage.WindowsAclLogicTests.t
 test_real_acl_is_current_user_only (test_storage.WindowsAclRealTests.test_real_acl_is_current_user_only) ... skipped 'real Windows ACLs (forced by SCM_REQUIRE_WINDOWS_ACL=1)'
 
 ----------------------------------------------------------------------
-Ran 37 tests in 8.734s
+Ran 37 tests in 8.732s
 
 OK (skipped=1)
 exit=0
 
-### Run C: forced Windows ACL requirement on Linux (expected to FAIL; proves the switch cannot be silently skipped)
+### Run C: forced Windows ACL requirement on Linux (expected FAIL)
 $ SCM_REQUIRE_WINDOWS_ACL=1 python -m unittest -v test_storage.WindowsAclRealTests
 test_real_acl_is_current_user_only (test_storage.WindowsAclRealTests.test_real_acl_is_current_user_only) ... FAIL
 FAIL: test_real_acl_is_current_user_only (test_storage.WindowsAclRealTests.test_real_acl_is_current_user_only)
-  File "<checkout>/poc/event_collector/test_storage.py", line 124, in test_real_acl_is_current_user_only
+  File "<checkout>/poc/event_collector/test_storage.py", line 126, in test_real_acl_is_current_user_only
 AssertionError: 'posix' != 'nt'
-Ran 1 test in 0.001s
+Ran 1 test in 0.000s
 FAILED (failures=1)
 exit=1
 
-### Run D: forced GUI requirement without Tkinter (Python 3.13.18; expected to FAIL)
+### Run D: forced GUI requirement without Tkinter (expected FAIL)
 $ SCM_REQUIRE_GUI=1 python -m unittest -v test_gui
 test_synthetic_capture_and_export_via_gui (test_gui.GuiSmokeTests.test_synthetic_capture_and_export_via_gui) ... FAIL
 FAIL: test_synthetic_capture_and_export_via_gui (test_gui.GuiSmokeTests.test_synthetic_capture_and_export_via_gui)
